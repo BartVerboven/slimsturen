@@ -1,0 +1,86 @@
+blueprint:
+  name: "Wallbox slim laden bij volle batterij en PV-overschot"
+  description: >
+    Start Wallbox laden als batterij SoC ≥ 95% en er voldoende PV-overschot is. Dynamisch aanpassen van laadstroom. Stop laden als batterij < 90%.
+  domain: automation
+  input:
+    wallbox_switch:
+      name: Wallbox Switch
+      selector:
+        entity:
+          domain: switch
+    wallbox_charger_id:
+      name: Wallbox Charger ID
+      description: De ID van je Wallbox (voor laadstroom aanpassen)
+      selector:
+        text:
+    battery_soc_sensor:
+      name: Batterij SoC Sensor
+      selector:
+        entity:
+          domain: sensor
+          device_class: battery
+    pv_overschot_sensor:
+      name: PV Overschot Sensor
+      selector:
+        entity:
+          domain: sensor
+    max_current:
+      name: Maximale laadstroom (A)
+      default: 16
+      selector:
+        number:
+          min: 6
+          max: 16
+          step: 1
+    overschot_drempel:
+      name: Minimaal overschot (W) om te laden
+      default: 2000
+      selector:
+        number:
+          min: 500
+          max: 10000
+          step: 100
+
+mode: single
+
+trigger:
+  - platform: numeric_state
+    entity_id: !input battery_soc_sensor
+    above: 95
+  - platform: numeric_state
+    entity_id: !input pv_overschot_sensor
+    above: !input overschot_drempel
+
+condition:
+  - condition: numeric_state
+    entity_id: !input battery_soc_sensor
+    above: 95
+  - condition: numeric_state
+    entity_id: !input pv_overschot_sensor
+    above: !input overschot_drempel
+
+action:
+  - service: switch.turn_on
+    entity_id: !input wallbox_switch
+  - repeat:
+      while:
+        - condition: numeric_state
+          entity_id: !input battery_soc_sensor
+          above: 90
+        - condition: numeric_state
+          entity_id: !input pv_overschot_sensor
+          above: 500
+      sequence:
+        - variables:
+            overschot: "{{ states( input.pv_overschot_sensor ) | float }}"
+            laadstroom: >
+              {% set ampere = (overschot / 230) | int %}
+              {% if ampere < 6 %}6{% elif ampere > input.max_current %}{{ input.max_current }}{% else %}{{ ampere }}{% endif %}
+        - service: wallbox.set_max_charging_current
+          data:
+            charger_id: !input wallbox_charger_id
+            max_charging_current: "{{ laadstroom }}"
+        - delay: "00:01:00"
+  - service: switch.turn_off
+    entity_id: !input wallbox_switch
