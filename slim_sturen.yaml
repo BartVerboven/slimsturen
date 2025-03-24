@@ -19,7 +19,6 @@ blueprint:
       selector:
         entity:
           domain: sensor
-          device_class: battery
     pv_overschot_sensor:
       name: PV Overschot Sensor
       selector:
@@ -31,11 +30,11 @@ blueprint:
       selector:
         number:
           min: 6
-          max: 16
+          max: 20
           step: 1
     overschot_drempel:
       name: Minimaal overschot (W) om te laden
-      default: 2000
+      default: 500
       selector:
         number:
           min: 500
